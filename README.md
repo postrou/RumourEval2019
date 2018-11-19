@@ -1,2 +1,3 @@
 # RumourEval2019
-https://competitions.codalab.org/competitions/19938#
+- [Competition link](https://competitions.codalab.org/competitions/19938#)
+- [Google Group](https://groups.google.com/forum/#!forum/rumoureval)
