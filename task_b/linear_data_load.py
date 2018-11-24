@@ -1,10 +1,8 @@
 import json
 import os
 import pandas as pd
-import sys
+import sys; sys.path.insert(0, '../organizers_baseline/preprocessing')
 from tree2branches import tree2branches
-
-sys.path.insert(0, '../organizers_baseline/preprocessing')
 
 
 def load_subtask_targets(data_dir: str, subtask: str, train: bool):
@@ -169,7 +167,12 @@ def lin_rumour_data(a_data, b_data, struct):
                 n_deny = 0
                 n = 0
     data = pd.DataFrame.from_dict(X_dict, orient='index')
-    data = data.loc[data['veracity'].isin(['true', 'false'])]
-    data['veracity'] = [1 if v == 'true' else 0 for v in data['veracity']]
 
     return data
+
+
+def remove_unverified(data):
+    data = data.loc[data.loc[:, 'veracity'].isin(['true', 'false'])]
+    data.loc[:, 'veracity'] = [1 if v == 'true' else 0 for v in data.loc[:, 'veracity']]
+
+    return data.loc[:, ['support', 'deny']], data.loc[:, 'veracity']
