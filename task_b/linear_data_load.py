@@ -1,8 +1,12 @@
 import json
 import os
-import pandas as pd
 import sys; sys.path.insert(0, '../organizers_baseline/preprocessing')
+
+import numpy as np
+import pandas as pd
+
 from tree2branches import tree2branches
+from features import *
 
 
 def load_subtask_targets(data_dir: str, subtask: str, train: bool):
@@ -12,10 +16,15 @@ def load_subtask_targets(data_dir: str, subtask: str, train: bool):
     with open(os.path.join(data_dir, targets_file), 'r') as f:
         targets = json.load(f)
         subtask_targets = targets['subtask' + subtask + 'english']
-
+    if subtask == 'a':
+        sqdc_to_int = {'support': 0, 'deny': 1, 'query': 2, 'comment': 3}
+        for key, value in subtask_targets.items():
+            subtask_targets[key] = sqdc_to_int[value]
+    else:
+        veracity_to_int = {'true': 0, 'false': 1, 'unverified': 2}
+        for key, value in subtask_targets.items():
+            subtask_targets[key] = veracity_to_int[value]
     return pd.Series(subtask_targets)
-
-
 
 def load_rumours_data(data_dir):
     struct_file = 'structure.json'
@@ -50,8 +59,6 @@ def load_rumours_data(data_dir):
 
     return rumours_source_dict, rumours_replies_dict, data_struct
 
-
-
 def load_single_rumour_data(rumour_path, source):
     rumour_source_dict = {}
     rumour_replies_dict = {}
@@ -68,47 +75,32 @@ def load_single_rumour_data(rumour_path, source):
                         rumour_replies_dict.update(rumour_data)
     return rumour_source_dict, rumour_replies_dict
 
-
 def handle_rumour(rumour, directory, source):
     if directory == 'source-tweet':
 
         if source == 'reddit':
             rumour = rumour['data']['children'][0]['data']
-            rumour_data = {rumour['id']: {'text': rumour['title']}}
+            rumour_data = {rumour['id']:
+                            {'text': text_preprocess(rumour['title'])}}
         else:
-            rumour_data = {str(rumour['id']): {'text': rumour['text']}}
+            rumour_data = {str(rumour['id']):
+                            {'text': text_preprocess(rumour['text'])}}
 
     else:
 
         if source == 'reddit':
             rumour = rumour['data']
             try:
-                rumour_data = {rumour['id']: {'text': rumour['body']}}
+                rumour_data = {rumour['id']: {'text':
+                                text_preprocess(rumour['body'])}}
             except KeyError:
                 rumour_data = {rumour['id']: {'text': 'DELETED'}}
+
         else:
-            rumour_data = {str(rumour['id']): {'text': rumour['text']}}
+            rumour_data = {str(rumour['id']):
+                            {'text': text_preprocess(rumour['text'])}}
 
     return rumour_data
-
-
-def load_struct(data_dir):
-    struct_file = 'structure.json'
-    data_struct = {}
-    for source_dir in next(os.walk(data_dir))[1]:
-        if 'reddit' in source_dir:
-            for rumour_dir in next(os.walk(os.path.join(data_dir, source_dir)))[1]:
-                rumour_path = os.path.join(data_dir, source_dir, rumour_dir)
-                with open(os.path.join(rumour_path, struct_file), 'r') as f:
-                    data_struct.update(json.load(f))
-        else:
-            for theme_dir in next(os.walk(os.path.join(data_dir, source_dir)))[1]:
-                theme_path = os.path.join(data_dir, source_dir, theme_dir)
-                for rumour_dir in next(os.walk(theme_path))[1]:
-                    with open(os.path.join(theme_path, rumour_dir, struct_file), 'r') as f:
-                        data_struct.update(json.load(f))
-    return data_struct
-
 
 def build_dataset(data_dir):
     rumours_source_dict, \
@@ -124,14 +116,22 @@ def build_dataset(data_dir):
     b_X = pd.DataFrame.from_dict(rumours_source_dict, orient='index')
     a_X = pd.DataFrame.from_dict(rumours_replies_dict, orient='index')
 
-    b_train_data = b_X.reindex(list(b_y_train.keys())).assign(veracity=b_y_train)
-    b_dev_data = b_X.reindex(list(b_y_dev.keys())).assign(veracity=b_y_dev)
     a_train_data = a_X.reindex(list(a_y_train.keys())).assign(sqdc=a_y_train)
     a_dev_data = a_X.reindex(list(a_y_dev.keys())).assign(sqdc=a_y_dev)
+    a_dev_data = a_dev_data.dropna(axis=0)
+
+    b_train_data = b_X.reindex(list(b_y_train.keys()))
+    b_train_data = add_features(b_train_data, a_train_data, data_struct)
+    b_dev_data = b_X.reindex(list(b_y_dev.keys()))
+    b_dev_data = add_features(b_dev_data, a_dev_data, data_struct)
+
+    b_train_data = b_train_data.assign(veracity=b_y_train)
+    b_dev_data = b_dev_data.assign(veracity=b_y_dev)
 
     return a_train_data, a_dev_data, \
             b_train_data, b_dev_data, data_struct
 
+#--------------------------LINEAR------------------------------------
 
 def lin_rumour_data(a_data, b_data, struct):
     X_dict = {}
