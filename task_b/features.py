@@ -14,7 +14,8 @@ def text_preprocess(text):
                         strip_handles=True,
                         reduce_len=True)
     tokens = [token for token in tt.tokenize(text)
-                if not re.fullmatch(r'[\W_]+|rt|via', token)]
+                if not re.fullmatch(r'[\W_]+|rt|via|http.+', token)]
+    # tokens = tt.tokenize(text)
 
     # remove stopwords
     tokens = [token for token in tokens
@@ -22,7 +23,7 @@ def text_preprocess(text):
 
     return tokens
 
-def sqdc_percentage(stance_data, data_struct):
+def sqdc_percentage(veracity_index, stance_data, data_struct):
     sqdc_dict = {}
     branches = tree2branches(data_struct)
 
@@ -32,16 +33,9 @@ def sqdc_percentage(stance_data, data_struct):
     n = 0
 
     for i, branch in enumerate(branches):
-        # if i == 0 or branch[0] == branches[i - 1][0]:
-        #     n += len(branch[1:])
-        # else:
-        #     sqdc_dict.update({branches[i - 1][0]: {'support': n_support / n,
-        #                                          'deny': n_deny / n,
-        #                                          'query': n_query / n}})
-        #     n_support = 0
-        #     n_deny = 0
-        #     n_query = 0
-        #     n = len(branch[1:])
+        if branch[0] not in veracity_index:
+            continue
+
         n += len(branch[1:])
 
         for reply in branch[1:]:
@@ -76,8 +70,17 @@ def sqdc_percentage(stance_data, data_struct):
     return data
 
 def add_features(veracity_data, stance_data, data_struct):
-    # sqd sqdc_percentage
-    sqdc_data = sqdc_percentage(stance_data, data_struct)
+    # stance
+    # veracity_data = veracity_data.assign(
+                        # sqdc=stance_data.loc[veracity_data.index].sqdc)
+    veracity_data = veracity_data.assign(
+        support=list(map(float, stance_data.loc[veracity_data.index].sqdc == 0)),
+        deny=list(map(float, stance_data.loc[veracity_data.index].sqdc == 1)),
+        query=list(map(float, stance_data.loc[veracity_data.index].sqdc == 2)),
+        comment=list(map(float, stance_data.loc[veracity_data.index].sqdc == 3)))
+
+    # sqdc_percentage
+    sqdc_data = sqdc_percentage(veracity_data.index, stance_data, data_struct)
     veracity_data = pd.concat([veracity_data, sqdc_data], axis=1, sort=False)
 
     return veracity_data

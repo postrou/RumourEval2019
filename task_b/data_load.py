@@ -16,14 +16,17 @@ def load_subtask_targets(data_dir: str, subtask: str, train: bool):
     with open(os.path.join(data_dir, targets_file), 'r') as f:
         targets = json.load(f)
         subtask_targets = targets['subtask' + subtask + 'english']
+
     if subtask == 'a':
-        sqdc_to_int = {'support': 0, 'deny': 1, 'query': 2, 'comment': 3}
+        sqdc_to_int = {'support': 0., 'deny': 1., 'query': 2., 'comment': 3.}
         for key, value in subtask_targets.items():
             subtask_targets[key] = sqdc_to_int[value]
+
     else:
-        veracity_to_int = {'true': 0, 'false': 1, 'unverified': 2}
+        veracity_to_int = {'true': 0., 'false': 1., 'unverified': 2.}
         for key, value in subtask_targets.items():
             subtask_targets[key] = veracity_to_int[value]
+
     return pd.Series(subtask_targets)
 
 def load_rumours_data(data_dir):
@@ -112,17 +115,21 @@ def build_dataset(data_dir):
     b_y_train = load_subtask_targets(data_dir, 'b', True)
     b_y_dev = load_subtask_targets(data_dir, 'b', False)
 
+    sources_df = pd.DataFrame.from_dict(rumours_source_dict, orient='index')
+    replies_df = pd.DataFrame.from_dict(rumours_replies_dict, orient='index')
 
-    b_X = pd.DataFrame.from_dict(rumours_source_dict, orient='index')
-    a_X = pd.DataFrame.from_dict(rumours_replies_dict, orient='index')
+    a_train_data = pd.concat([replies_df, sources_df])
+    a_train_data.drop(list(a_y_dev.keys()), inplace=True)
+    a_train_data = a_train_data.assign(sqdc=a_y_train)
 
-    a_train_data = a_X.reindex(list(a_y_train.keys())).assign(sqdc=a_y_train)
-    a_dev_data = a_X.reindex(list(a_y_dev.keys())).assign(sqdc=a_y_dev)
-    a_dev_data = a_dev_data.dropna(axis=0)
+    a_dev_data = pd.concat([replies_df, sources_df])
+    a_dev_data.drop(list(a_y_train.keys()), inplace=True)
+    a_dev_data = a_dev_data.assign(sqdc=a_y_dev)
 
-    b_train_data = b_X.reindex(list(b_y_train.keys()))
+    b_train_data = sources_df.drop(list(b_y_dev.keys()))
+    b_dev_data = sources_df.drop(list(b_y_train.keys()))
+
     b_train_data = add_features(b_train_data, a_train_data, data_struct)
-    b_dev_data = b_X.reindex(list(b_y_dev.keys()))
     b_dev_data = add_features(b_dev_data, a_dev_data, data_struct)
 
     b_train_data = b_train_data.assign(veracity=b_y_train)
